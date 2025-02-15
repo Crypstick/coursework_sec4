@@ -1,29 +1,41 @@
 import cv2
 import numpy as np 
+import math
 
 # Open the default camera
 print("opening cam")
 cam = cv2.VideoCapture(0)
-
+WIDTH  = cam.get(cv2.CAP_PROP_FRAME_WIDTH)   # float `width`
+HEIGHT = cam.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float `height`
+print(WIDTH,HEIGHT)
 
 size_y = 100
 size_x = 200
+snapTo = [[550,500], [300,150],[650,150], [1100,150]]
+mouseX = snapTo[0][0]
+mouseY = snapTo[0][1]
+
 
 update = True
-mouseX = 550
-mouseY = 500
+set_down = False
 drag_state = False
 def change_pic_coord(event,x,y,flags,param):
-    global mouseX,mouseY, drag_state, update, size_y, size_x
+    global mouseX,mouseY, drag_state, update, size_y, size_x, set_down
     if event == cv2.EVENT_LBUTTONDOWN:
         if drag_state: #put down
             drag_state = False
-        elif abs(x - mouseX)-size_x//2-50 < 0 and abs(y - mouseY)-size_y//2-50: #pick up or nah
+            set_down = True
+        elif abs(x - mouseX)-size_x//2-50 < 0 and abs(y - mouseY)-size_y//2-50 < 0: #pick up or nah
             drag_state = True
+            print("HITTT", mouseX, mouseY, x, y)
+            mouseX,mouseY = x,y
+            update = True
+        else:
+            print("no hit")
     elif event == cv2.EVENT_MOUSEMOVE and drag_state:
         mouseX,mouseY = x,y
         update = True
-    print(event, x, y)
+    print(event, x, y, update, mouseX, mouseY)
 
 
 cv2.namedWindow('Camera')
@@ -38,16 +50,46 @@ img2gray = cv2.cvtColor(logo, cv2.COLOR_BGR2GRAY)
 ret, mask = cv2.threshold(img2gray, 25, 255, cv2.THRESH_BINARY_INV)
 img_mask = cv2.bitwise_not(mask)
 
-
+corner_x, corner_y = 0, 0
 while True:
     ret, frame = cam.read()
     if update:
-        corner_x = mouseX-size_x//2
-        corner_y = mouseY-size_y//2
-        roi = frame[corner_y: size_y+corner_y, corner_x:size_x+corner_x] 
-        roi_empty = cv2.bitwise_and(roi, roi, mask = img_mask)
-        roi[np.where(mask)] = 0
-        roi_empty += logo 
+        if set_down:
+            #find closest snap to
+            best = snapTo[0]
+            #use ptythagorous to find distance
+            dist = math.sqrt(math.pow(snapTo[0][0] - mouseX, 2) + math.pow(snapTo[0][1] - mouseY, 2))
+            for pair in snapTo:
+                tmp = math.sqrt(math.pow(pair[0] - mouseX, 2) + math.pow(pair[1] - mouseY, 2))
+                if tmp < dist:
+                    dist = tmp
+                    best = pair
+
+            corner_x = best[0]-size_x//2
+            corner_y = best[1]-size_y//2
+            mouseX = best[0]
+            mouseY = best[1]
+            set_down = False
+            update = False
+        else:
+            corner_x = mouseX-size_x//2
+            corner_y = mouseY-size_y//2
+    #edge detection
+    if corner_x < 0:
+        corner_x = 0
+    if corner_y < 0:
+        corner_y = 0
+    if (corner_x + size_x) > WIDTH:
+        corner_x = int(WIDTH-size_x)
+    if (corner_y + size_y) > HEIGHT:
+        corner_y = int(HEIGHT-size_y)
+
+    #update the picture
+    roi = frame[corner_y: size_y+corner_y, corner_x:size_x+corner_x] 
+    roi_empty = cv2.bitwise_and(roi, roi, mask = img_mask)
+    roi[np.where(mask)] = 0
+    roi_empty += logo 
+        
 
     # Display the captured frame
     cv2.imshow('Camera', frame)
