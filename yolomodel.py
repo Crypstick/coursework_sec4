@@ -75,6 +75,9 @@ def overlay_image(background, overlay, x, y, overlay_size, angle):
 while cap.isOpened():
     ret, frame = cap.read()
     
+    # mirroed view cos my asymetrical face got me fucked up gng
+    frame = cv2.flip(frame, 1)
+    
     # calculate FPS
     new_frame_time = time.time()
     fps = 1/(new_frame_time-prev_frame_time) if prev_frame_time > 0 else 0
