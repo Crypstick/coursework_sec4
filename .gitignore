@@ -1,5 +1,10 @@
-# Python virtual environment
-beybladevenv/
+# Ignore everything
+*
+
+# But not these files...
+!.gitignore
+!yolomodel.py
+!lebron.png
 
 # Python cache files
 __pycache__/
