@@ -19,11 +19,31 @@ new_frame_time = 0
 prev_filter_params = {}  # Dictionary to store parameters for each person
 
 # load ledaddy face oh yeahhhhhh
-lebron_face = cv2.imread("lebron.png", -1)
+PIC_URL = ["lebron.png", "hat.png"]
+filter_pic = [] #reference for the picture 1. file 2. height 3. width
+for str in PIC_URL:
+    tmp = cv2.imread(str, -1)
+    if tmp is None or tmp.shape[0] == 0 or tmp.shape[1] == 0:
+        raise FileNotFoundError("aint no",str)
+    else:
+        h, w, c = tmp.shape
+        filter_pic.append((tmp,h,w))
 
-# got lebron meh
-if lebron_face is None or lebron_face.shape[0] == 0 or lebron_face.shape[1] == 0:
-    raise FileNotFoundError("aint no lebron.png")
+
+#where we loading the pictures bruh
+SELECTION_DEFAULT = [[20,20], [80, 20]]
+selection_current = SELECTION_DEFAULT.copy()
+
+#for the snapping; js 1. position of the nose 2. assigned thing
+class Person:
+    def __init__(self, image_it, x, y):
+        self.image_it = image_it
+        self.x = x
+        self.y = y
+
+
+people = [Person(0, 0, 0)]
+amt_people = 1
 
 # making filter tilt when we tilt our head
 def rotate_image(image, angle):
@@ -71,6 +91,79 @@ def overlay_image(background, overlay, x, y, overlay_size, angle):
         )
 
     return background
+update = True
+set_down = False
+drag_state = False
+def change_pic_coord(event,x,y,flags,param):
+    global mouseX,mouseY, drag_state, update, size_y, size_x, set_down
+    if event == cv2.EVENT_LBUTTONDOWN:
+         #put down the picture
+        if drag_state:
+            drag_state = False
+            set_down = True
+        #decide if the mouse click is close enuough to the picture to be clicked
+        elif abs(x - mouseX)-size_x//2-50 < 0 and abs(y - mouseY)-size_y//2-50 < 0: 
+            drag_state = True
+            mouseX,mouseY = x,y
+            update = True
+    #when dragin update position
+    elif event == cv2.EVENT_MOUSEMOVE and drag_state:
+        mouseX,mouseY = x,y
+        update = True
+    print(event, x, y, update, mouseX, mouseY)
+
+def overlay_LEBRON(kp):
+    try:
+        # convert keypoints to integers more efficiently
+        keypoints_int = kp[:5].astype(np.int32)
+        nose_x, nose_y = keypoints_int[0]
+        left_eye_x, left_eye_y = keypoints_int[1]
+        right_eye_x, right_eye_y = keypoints_int[2]
+        left_ear_x, left_ear_y = keypoints_int[3]
+        right_ear_x, right_ear_y = keypoints_int[4]  
+        
+        # estimate chin using eye-nose distance
+        eye_mid_x = int((left_eye_x + right_eye_x) // 2)
+        eye_mid_y = int((left_eye_y + right_eye_y) // 2)
+
+        # distance from nose to eyes
+        nose_to_eye_distance = abs(nose_y - eye_mid_y)
+
+        # estimate chin position
+        chin_x = eye_mid_x
+        chin_y = int(nose_y + (nose_to_eye_distance * 2.5))  # Adjust multiplier for better accuracy
+
+        # calculate head tilt angle
+        angle = np.degrees(np.arctan2(left_eye_y - right_eye_y, left_eye_x - right_eye_x))
+
+    except IndexError:
+        return  
+
+    # more lenient ear position check
+    if left_ear_y > chin_y or right_ear_y > chin_y:
+        return  
+
+    # more lenient chin position check
+    if chin_y < nose_y or chin_y - nose_y > 400:  # Increased threshold
+        return  
+
+    # more lenient ear spacing check
+    ear_distance = abs(right_ear_x - left_ear_x)
+    if ear_distance < 15 or ear_distance > 400:  # Adjusted thresholds
+        return  
+
+    # improved face width calculation
+    face_width = ear_distance
+    face_height = abs(chin_y - eye_mid_y) * 2.2  # making sure the crown fits just right
+
+    # size matters
+    filter_width = max(120, int(face_width * 1.3))  # make room for the beard
+    filter_height = max(140, int(face_height * 1.6))  # tall head
+
+    # perfect placement
+    new_filter_x = nose_x - filter_width // 2
+    new_filter_y = nose_y - int(filter_height * 0.6) 
+    return (new_filter_x,new_filter_y, filter_width,filter_height, angle)
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -98,58 +191,12 @@ while cap.isOpened():
             keypoints = r.keypoints.xy.cpu().numpy()
 
             # THIS PART WAS SO FUCKING DIFFICULT WTF BRO
-
             for person_idx, kp in enumerate(keypoints):  # loop through all detected people with unique index
-                try:
-                    # convert keypoints to integers more efficiently
-                    keypoints_int = kp[:5].astype(np.int32)
-                    nose_x, nose_y = keypoints_int[0]
-                    left_eye_x, left_eye_y = keypoints_int[1]
-                    right_eye_x, right_eye_y = keypoints_int[2]
-                    left_ear_x, left_ear_y = keypoints_int[3]
-                    right_ear_x, right_ear_y = keypoints_int[4]  
-                    
-                    # estimate chin using eye-nose distance
-                    eye_mid_x = int((left_eye_x + right_eye_x) // 2)
-                    eye_mid_y = int((left_eye_y + right_eye_y) // 2)
-
-                    # distance from nose to eyes
-                    nose_to_eye_distance = abs(nose_y - eye_mid_y)
-
-                    # estimate chin position
-                    chin_x = eye_mid_x
-                    chin_y = int(nose_y + (nose_to_eye_distance * 2.5))  # Adjust multiplier for better accuracy
-
-                    # calculate head tilt angle
-                    angle = np.degrees(np.arctan2(left_eye_y - right_eye_y, left_eye_x - right_eye_x))
-
-                except IndexError:
-                    continue  
-
-                # more lenient ear position check
-                if left_ear_y > chin_y or right_ear_y > chin_y:
-                    continue  
-
-                # more lenient chin position check
-                if chin_y < nose_y or chin_y - nose_y > 400:  # Increased threshold
-                    continue  
-
-                # more lenient ear spacing check
-                ear_distance = abs(right_ear_x - left_ear_x)
-                if ear_distance < 15 or ear_distance > 400:  # Adjusted thresholds
-                    continue  
-
-                # improved face width calculation
-                face_width = ear_distance
-                face_height = abs(chin_y - eye_mid_y) * 2.2  # making sure the crown fits just right
-
-                # size matters
-                filter_width = max(120, int(face_width * 1.3))  # make room for the beard
-                filter_height = max(140, int(face_height * 1.6))  # tall head
-
-                # perfect placement
-                new_filter_x = nose_x - filter_width // 2
-                new_filter_y = nose_y - int(filter_height * 0.6) 
+                result = overlay_LEBRON(kp)
+                if result == None:
+                    continue
+                else:
+                    new_filter_x, new_filter_y, filter_width, filter_height, angle = result
 
                 # smooth transitions for each person independently
                 if person_idx in prev_filter_params:
@@ -170,38 +217,10 @@ while cap.isOpened():
                 filter_y = max(0, min(filter_y, frame.shape[0] - filter_height))
 
                 # LEBRONIFICATION
-                frame = overlay_image(frame, lebron_face, filter_x, filter_y, (filter_width, filter_height), angle)
+                frame = overlay_image(frame, filter_pic[people[0].image_it][0], filter_x, filter_y, (filter_width, filter_height), angle)
 
-                # Draw all keypoints and connections for the full body
-                # Define the keypoint connections for the body
-                skeleton = [
-                    [5, 7], [7, 9],     # Right arm
-                    [6, 8], [8, 10],    # Left arm
-                    [5, 6],             # Shoulders
-                    [5, 11], [6, 12],   # Torso
-                    [11, 13], [13, 15], # Right leg
-                    [12, 14], [14, 16], # Left leg
-                    [11, 12],           # Hips
-                    [0, 1], [0, 2],     # Nose to eyes
-                    [1, 3], [2, 4],     # Eyes to ears
-                ]
-
-                # Draw all keypoints
-                for idx, (x, y) in enumerate(kp):
-                    color = (0, 255, 0) if idx < 5 else (0, 255, 255)  # Green for face, Cyan for body
-                    cv2.circle(frame, (int(x), int(y)), 5, color, -1)
-
-                # Draw skeleton connections
-                for start_idx, end_idx in skeleton:
-                    if start_idx < len(kp) and end_idx < len(kp):
-                        start_point = tuple(map(int, kp[start_idx]))
-                        end_point = tuple(map(int, kp[end_idx]))
-                        cv2.line(frame, start_point, end_point, (255, 0, 0), 2)
-
-                # Draw chin point and its connections (keeping face structure visualization)
-                cv2.circle(frame, (chin_x, chin_y), 5, (0, 255, 0), -1)
-                cv2.line(frame, (left_ear_x, left_ear_y), (chin_x, chin_y), (255, 0, 0), 2)
-                cv2.line(frame, (right_ear_x, right_ear_y), (chin_x, chin_y), (255, 0, 0), 2)
+            for i in range(len(selection_current)):
+                frame = overlay_image(frame, filter_pic[i][0], selection_current[0][0], selection_current[0][1], (filter_pic[i][1], filter_pic[i][2]), 0)
 
     # showing FPS
     cv2.putText(frame, f'FPS: {int(fps)}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
