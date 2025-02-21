@@ -18,12 +18,22 @@ prev_frame_time = 0
 new_frame_time = 0
 prev_filter_params = {}  # Dictionary to store parameters for each person
 
-# load ledaddy face oh yeahhhhhh
+# load all the images we need
 lebron_face = cv2.imread("lebron.png", -1)
+tshirt = cv2.imread("sstshirt.png", -1)  # load the t-shirt image
+blue_shirt = cv2.imread("bluesw.png", -1)  # load the blue shirt image
 
 # got lebron meh
 if lebron_face is None or lebron_face.shape[0] == 0 or lebron_face.shape[1] == 0:
     raise FileNotFoundError("aint no lebron.png")
+
+# got tshirt meh
+if tshirt is None or tshirt.shape[0] == 0 or tshirt.shape[1] == 0:
+    raise FileNotFoundError("aint no sstshirt.png")
+
+# got blue shirt meh
+if blue_shirt is None or blue_shirt.shape[0] == 0 or blue_shirt.shape[1] == 0:
+    raise FileNotFoundError("aint no bluesw.png")
 
 # making filter tilt when we tilt our head
 def rotate_image(image, angle):
@@ -71,6 +81,12 @@ def overlay_image(background, overlay, x, y, overlay_size, angle):
         )
 
     return background
+
+# Filter management
+face_filters = {0: None, 1: lebron_face}  # Add more face filters here
+shirt_filters = {0: None, 1: tshirt, 2: blue_shirt}  # Added blue shirt as option 2
+current_face_filter = 1  # Start with LeBron filter (1) or no filter (0)
+current_shirt_filter = 1  # Start with current t-shirt (1) or no filter (0)
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -170,7 +186,44 @@ while cap.isOpened():
                 filter_y = max(0, min(filter_y, frame.shape[0] - filter_height))
 
                 # LEBRONIFICATION
-                frame = overlay_image(frame, lebron_face, filter_x, filter_y, (filter_width, filter_height), angle)
+                if current_face_filter != 0 and face_filters[current_face_filter] is not None:
+                    frame = overlay_image(frame, face_filters[current_face_filter], filter_x, filter_y, (filter_width, filter_height), angle)
+
+                # T-SHIRTIFICATION
+                if current_shirt_filter != 0 and shirt_filters[current_shirt_filter] is not None and len(kp) >= 12:  # Make sure we have enough keypoints for shoulders and hips
+                    # Get shoulder points with better precision
+                    left_shoulder = tuple(map(int, kp[5]))
+                    right_shoulder = tuple(map(int, kp[6]))
+                    # Get hip points for better proportions
+                    left_hip = tuple(map(int, kp[11]))
+                    right_hip = tuple(map(int, kp[12]))
+
+                    # Calculate shirt dimensions with improved proportions and validation
+                    shoulder_width = abs(right_shoulder[0] - left_shoulder[0])
+                    torso_height = abs((left_hip[1] + right_hip[1])/2 - (left_shoulder[1] + right_shoulder[1])/2)
+                    
+                    # Ensure minimum dimensions to prevent resize errors
+                    shirt_width = max(50, int(shoulder_width * 2.5))  # Minimum width of 50 pixels
+                    shirt_height = max(50, int(torso_height * 2.0))  # Minimum height of 50 pixels
+
+                    # Enhanced shirt positioning using midpoints
+                    shoulder_center_x = (left_shoulder[0] + right_shoulder[0]) // 2
+                    shoulder_center_y = (left_shoulder[1] + right_shoulder[1]) // 2
+                    shirt_x = int(shoulder_center_x - shirt_width // 2)
+                    shirt_y = int(shoulder_center_y - shirt_height * 0.3)  # Higher placement
+
+                    # Skip if dimensions are invalid
+                    if shirt_width <= 0 or shirt_height <= 0:
+                        continue
+
+                    # Improved angle calculation using both shoulders
+                    shoulder_angle = np.degrees(np.arctan2(right_shoulder[1] - left_shoulder[1],
+                                                        right_shoulder[0] - left_shoulder[0]))
+                    shirt_angle = 0  # Keep shirt perfectly upright
+
+                    # Apply the overlay with adjusted parameters
+                    frame = overlay_image(frame, shirt_filters[current_shirt_filter], shirt_x, shirt_y,
+                                        (shirt_width, shirt_height), shirt_angle)
 
                 # Draw all keypoints and connections for the full body
                 # Define the keypoint connections for the body
@@ -203,9 +256,26 @@ while cap.isOpened():
                 cv2.line(frame, (left_ear_x, left_ear_y), (chin_x, chin_y), (255, 0, 0), 2)
                 cv2.line(frame, (right_ear_x, right_ear_y), (chin_x, chin_y), (255, 0, 0), 2)
 
-    # showing FPS
+    # Filter state is managed outside the loop to maintain proper switching
+
+    # showing FPS and controls info
     cv2.putText(frame, f'FPS: {int(fps)}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+    cv2.putText(frame, 'F: Switch Face Filter', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    cv2.putText(frame, 'S: Switch Shirt Filter', (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    cv2.putText(frame, 'R: Remove All Filters', (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
     cv2.imshow("LeBron Filter + Full Tracking View (Multi-Person + Head Tilt Fixed)", frame)
+
+    # keyboard controls
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord('q'):
+        break
+    elif key == ord('f'):  # Switch face filter
+        current_face_filter = (current_face_filter + 1) % len(face_filters)
+    elif key == ord('s'):  # Switch shirt filter
+        current_shirt_filter = (current_shirt_filter + 1) % len(shirt_filters)
+    elif key == ord('r'):  # Remove all filters
+        current_face_filter = 0
+        current_shirt_filter = 0
 
     # press q to quit
     if cv2.waitKey(1) & 0xFF == ord('q'):
