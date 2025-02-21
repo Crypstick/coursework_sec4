@@ -216,6 +216,7 @@ def overlay_LEBRON(kp):
     new_filter_y = nose_y - int(filter_height * 0.6) 
     return (new_filter_x,new_filter_y, filter_width,filter_height, angle)
 
+#only process the yolo every 4 frames
 frame_count = 0
 frame_skip = 3
 while cap.isOpened():
