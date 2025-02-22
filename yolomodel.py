@@ -20,12 +20,29 @@ prev_filter_params = {}  # Dictionary to store parameters for each person
 
 # load all the images we need
 lebron_face = cv2.imread("lebron.png", -1)
+heart_face = cv2.imread("heart2.png", -1)
+birthday_hat = cv2.imread("birthday_hat_transparent.png", -1)  # load the birthday hat image
 tshirt = cv2.imread("sstshirt.png", -1)  # load the t-shirt image
 blue_shirt = cv2.imread("bluesw.png", -1)  # load the blue shirt image
+red_shirt = cv2.imread("redsw.png", -1)  # load the red shirt image
+green_shirt = cv2.imread("greensw.png", -1)  # load the green shirt image
+black_shirt = cv2.imread("blacksw.png", -1)  # load the black shirt image
+yellow_shirt = cv2.imread("yellowsw.png", -1)  # load the yellow shirt image
+
+# load jacket components
+jacket_torso = cv2.imread("sst_jacket_torso.png", -1)  # load the jacket torso
 
 # got lebron meh
 if lebron_face is None or lebron_face.shape[0] == 0 or lebron_face.shape[1] == 0:
     raise FileNotFoundError("aint no lebron.png")
+
+# got heart meh
+if heart_face is None or heart_face.shape[0] == 0 or heart_face.shape[1] == 0:
+    raise FileNotFoundError("aint no heart2.png")
+
+# got birthday hat meh
+if birthday_hat is None or birthday_hat.shape[0] == 0 or birthday_hat.shape[1] == 0:
+    raise FileNotFoundError("aint no birthday_hat_transparent.png")
 
 # got tshirt meh
 if tshirt is None or tshirt.shape[0] == 0 or tshirt.shape[1] == 0:
@@ -34,6 +51,28 @@ if tshirt is None or tshirt.shape[0] == 0 or tshirt.shape[1] == 0:
 # got blue shirt meh
 if blue_shirt is None or blue_shirt.shape[0] == 0 or blue_shirt.shape[1] == 0:
     raise FileNotFoundError("aint no bluesw.png")
+
+# got red shirt meh
+if red_shirt is None or red_shirt.shape[0] == 0 or red_shirt.shape[1] == 0:
+    raise FileNotFoundError("aint no redsw.png")
+
+# got green shirt meh
+if green_shirt is None or green_shirt.shape[0] == 0 or green_shirt.shape[1] == 0:
+    raise FileNotFoundError("aint no greensw.png")
+
+# got black shirt meh
+if black_shirt is None or black_shirt.shape[0] == 0 or black_shirt.shape[1] == 0:
+    raise FileNotFoundError("aint no blacksw.png")
+
+# got yellow shirt meh
+if yellow_shirt is None or yellow_shirt.shape[0] == 0 or yellow_shirt.shape[1] == 0:
+    raise FileNotFoundError("aint no yellowsw.png")
+
+# got jacket torso meh
+if jacket_torso is None or jacket_torso.shape[0] == 0 or jacket_torso.shape[1] == 0:
+    raise FileNotFoundError("aint no sst_jacket_torso.png")
+
+
 
 # making filter tilt when we tilt our head
 def rotate_image(image, angle):
@@ -83,8 +122,13 @@ def overlay_image(background, overlay, x, y, overlay_size, angle):
     return background
 
 # Filter management
-face_filters = {0: None, 1: lebron_face}  # Add more face filters here
-shirt_filters = {0: None, 1: tshirt, 2: blue_shirt}  # Added blue shirt as option 2
+face_filters = {0: None, 1: lebron_face, 2: heart_face, 3: birthday_hat}  # Added birthday hat filter
+face_width_multipliers = {1: 1.3, 2: 1.2, 3: 1.0}  # Width multipliers for each face filter
+face_height_multipliers = {1: 1.6, 2: 0.4, 3: 0.8}  # Height multipliers for each face filter (adjusted for birthday hat)
+shirt_filters = {0: None, 1: tshirt, 2: blue_shirt, 3: red_shirt, 4: green_shirt, 5: black_shirt, 6: yellow_shirt, 7: jacket_torso}  # Use jacket_torso as base image
+shirt_offsets = {1: 0.3, 2: 0.3, 3: 0.2, 4: 0.3, 5: 0.3, 6: 0.3, 7: 0.3}  # Adjusted offset for jacket_torso
+shirt_width_multipliers = {1: 3, 2: 2.5, 3: 2.0, 4: 2.5, 5: 2.5, 6: 2.5, 7: 2.5}  # Adjusted width multiplier for jacket_torso
+shirt_height_multipliers = {1: 2.5, 2: 2, 3: 1.6, 4: 2, 5: 2, 6: 2, 7: 2}  # Adjusted height multiplier for jacket_torso
 current_face_filter = 1  # Start with LeBron filter (1) or no filter (0)
 current_shirt_filter = 1  # Start with current t-shirt (1) or no filter (0)
 
@@ -160,12 +204,16 @@ while cap.isOpened():
                 face_height = abs(chin_y - eye_mid_y) * 2.2  # making sure the crown fits just right
 
                 # size matters
-                filter_width = max(120, int(face_width * 1.3))  # make room for the beard
-                filter_height = max(140, int(face_height * 1.6))  # tall head
+                filter_width = max(120, int(face_width * face_width_multipliers.get(current_face_filter, 1.3)))  # use filter-specific width multiplier
+                filter_height = max(140, int(face_height * face_height_multipliers.get(current_face_filter, 1.6)))  # use filter-specific height multiplier
 
                 # perfect placement
                 new_filter_x = nose_x - filter_width // 2
-                new_filter_y = nose_y - int(filter_height * 0.6) 
+                # Adjust vertical position based on filter type
+                if current_face_filter == 3:  # Birthday hat
+                    new_filter_y = eye_mid_y - int(filter_height * 1.2)  # Position hat above the head
+                else:
+                    new_filter_y = nose_y - int(filter_height * 0.6)  # Regular face filter position
 
                 # smooth transitions for each person independently
                 if person_idx in prev_filter_params:
@@ -202,15 +250,17 @@ while cap.isOpened():
                     shoulder_width = abs(right_shoulder[0] - left_shoulder[0])
                     torso_height = abs((left_hip[1] + right_hip[1])/2 - (left_shoulder[1] + right_shoulder[1])/2)
                     
-                    # Ensure minimum dimensions to prevent resize errors
-                    shirt_width = max(50, int(shoulder_width * 2.5))  # Minimum width of 50 pixels
-                    shirt_height = max(50, int(torso_height * 2.0))  # Minimum height of 50 pixels
+                    # Ensure minimum dimensions to prevent resize errors with custom multipliers for each shirt
+                    width_multiplier = shirt_width_multipliers.get(current_shirt_filter, 2.5)
+                    height_multiplier = shirt_height_multipliers.get(current_shirt_filter, 2.0)
+                    shirt_width = max(50, int(shoulder_width * width_multiplier))
+                    shirt_height = max(50, int(torso_height * height_multiplier))
 
                     # Enhanced shirt positioning using midpoints
                     shoulder_center_x = (left_shoulder[0] + right_shoulder[0]) // 2
                     shoulder_center_y = (left_shoulder[1] + right_shoulder[1]) // 2
                     shirt_x = int(shoulder_center_x - shirt_width // 2)
-                    shirt_y = int(shoulder_center_y - shirt_height * 0.3)  # Higher placement
+                    shirt_y = int(shoulder_center_y - shirt_height * shirt_offsets[current_shirt_filter])  # Use shirt-specific offset
 
                     # Skip if dimensions are invalid
                     if shirt_width <= 0 or shirt_height <= 0:
@@ -224,37 +274,8 @@ while cap.isOpened():
                     # Apply the overlay with adjusted parameters
                     frame = overlay_image(frame, shirt_filters[current_shirt_filter], shirt_x, shirt_y,
                                         (shirt_width, shirt_height), shirt_angle)
+                    
 
-                # Draw all keypoints and connections for the full body
-                # Define the keypoint connections for the body
-                skeleton = [
-                    [5, 7], [7, 9],     # Right arm
-                    [6, 8], [8, 10],    # Left arm
-                    [5, 6],             # Shoulders
-                    [5, 11], [6, 12],   # Torso
-                    [11, 13], [13, 15], # Right leg
-                    [12, 14], [14, 16], # Left leg
-                    [11, 12],           # Hips
-                    [0, 1], [0, 2],     # Nose to eyes
-                    [1, 3], [2, 4],     # Eyes to ears
-                ]
-
-                # Draw all keypoints
-                for idx, (x, y) in enumerate(kp):
-                    color = (0, 255, 0) if idx < 5 else (0, 255, 255)  # Green for face, Cyan for body
-                    cv2.circle(frame, (int(x), int(y)), 5, color, -1)
-
-                # Draw skeleton connections
-                for start_idx, end_idx in skeleton:
-                    if start_idx < len(kp) and end_idx < len(kp):
-                        start_point = tuple(map(int, kp[start_idx]))
-                        end_point = tuple(map(int, kp[end_idx]))
-                        cv2.line(frame, start_point, end_point, (255, 0, 0), 2)
-
-                # Draw chin point and its connections (keeping face structure visualization)
-                cv2.circle(frame, (chin_x, chin_y), 5, (0, 255, 0), -1)
-                cv2.line(frame, (left_ear_x, left_ear_y), (chin_x, chin_y), (255, 0, 0), 2)
-                cv2.line(frame, (right_ear_x, right_ear_y), (chin_x, chin_y), (255, 0, 0), 2)
 
     # Filter state is managed outside the loop to maintain proper switching
 
