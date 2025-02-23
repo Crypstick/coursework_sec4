@@ -4,7 +4,8 @@
 # But not these files...
 !.gitignore
 !yolomodel.py
-!*.png
+!pictures/
+!instructions/
 
 # Python cache files
 __pycache__/
