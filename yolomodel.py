@@ -7,16 +7,16 @@ import time
 # load yolo model
 model = YOLO("yolo11n-pose-better.pt")  
 
-# hijack dat mufuckin webcam bitchhhhh
+# hijack dat webcam 
 cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # making it small for speed
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 cap.set(cv2.CAP_PROP_FPS, 30)  # gotta go fast
 
-# some optimisation shit that chatgpt suggested
+
 prev_frame_time = 0
 new_frame_time = 0
-prev_filter_params = {}  # Dictionary to store parameters for each person
+prev_filter_params = {}  # dictionary to store parameters for each person
 
 # load all the images we need
 lebron_face = cv2.imread("lebron.png", -1)
@@ -28,9 +28,14 @@ red_shirt = cv2.imread("redsw.png", -1)  # load the red shirt image
 green_shirt = cv2.imread("greensw.png", -1)  # load the green shirt image
 black_shirt = cv2.imread("blacksw.png", -1)  # load the black shirt image
 yellow_shirt = cv2.imread("yellowsw.png", -1)  # load the yellow shirt image
+jacket_torso = cv2.imread("sst_jacket_torso.png", -1)  # load the jacket torso image
 
-# load jacket components
-jacket_torso = cv2.imread("sst_jacket_torso.png", -1)  # load the jacket torso
+# load gauntlet image
+gauntlet = cv2.imread("transparent_gauntlet.png", -1)  # load the gauntlet image
+
+# got gauntlet meh
+if gauntlet is None or gauntlet.shape[0] == 0 or gauntlet.shape[1] == 0:
+    raise FileNotFoundError("aint no transparent_gauntlet.png")
 
 # got lebron meh
 if lebron_face is None or lebron_face.shape[0] == 0 or lebron_face.shape[1] == 0:
@@ -79,7 +84,7 @@ def rotate_image(image, angle):
   
     h, w = image.shape[:2]
     center = (w // 2, h // 2)
-    rotation_matrix = cv2.getRotationMatrix2D(center, -angle, 1.0)  # 🔄 No more upside-down LeBron!
+    rotation_matrix = cv2.getRotationMatrix2D(center, -angle, 1.0)  # fixed upside down lebron
     rotated = cv2.warpAffine(image, rotation_matrix, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
     return rotated
 
@@ -93,7 +98,7 @@ def overlay_image(background, overlay, x, y, overlay_size, angle):
 
     h, w, c = overlay.shape
 
-    # beep beep out of bounds bitch
+    # beep beep out of bounds
     x = max(0, min(int(x), background.shape[1] - 1))
     y = max(0, min(int(y), background.shape[0] - 1))
 
@@ -105,7 +110,7 @@ def overlay_image(background, overlay, x, y, overlay_size, angle):
         w = background.shape[1] - x
         overlay = overlay[:, :w, :]  
 
-    # some transparency shi that chatgpt told me to do
+
     if c == 3:
         overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2BGRA)
 
@@ -121,21 +126,25 @@ def overlay_image(background, overlay, x, y, overlay_size, angle):
 
     return background
 
-# Filter management
-face_filters = {0: None, 1: lebron_face, 2: heart_face, 3: birthday_hat}  # Added birthday hat filter
-face_width_multipliers = {1: 1.3, 2: 1.2, 3: 1.0}  # Width multipliers for each face filter
-face_height_multipliers = {1: 1.6, 2: 0.4, 3: 0.8}  # Height multipliers for each face filter (adjusted for birthday hat)
+# filter management
+face_filters = {0: None, 1: lebron_face, 2: heart_face, 3: birthday_hat}  # added birthday hat filter
+face_width_multipliers = {1: 1.3, 2: 1.2, 3: 1.0}  # width multipliers for each face filter
+face_height_multipliers = {1: 1.6, 2: 0.4, 3: 0.8}  # height multipliers for each face filter (adjusted for birthday hat)
 shirt_filters = {0: None, 1: tshirt, 2: blue_shirt, 3: red_shirt, 4: green_shirt, 5: black_shirt, 6: yellow_shirt, 7: jacket_torso}  # Use jacket_torso as base image
-shirt_offsets = {1: 0.3, 2: 0.3, 3: 0.2, 4: 0.3, 5: 0.3, 6: 0.3, 7: 0.3}  # Adjusted offset for jacket_torso
-shirt_width_multipliers = {1: 3, 2: 2.5, 3: 2.0, 4: 2.5, 5: 2.5, 6: 2.5, 7: 2.5}  # Adjusted width multiplier for jacket_torso
-shirt_height_multipliers = {1: 2.5, 2: 2, 3: 1.6, 4: 2, 5: 2, 6: 2, 7: 2}  # Adjusted height multiplier for jacket_torso
-current_face_filter = 1  # Start with LeBron filter (1) or no filter (0)
-current_shirt_filter = 1  # Start with current t-shirt (1) or no filter (0)
+shirt_offsets = {1: 0.3, 2: 0.3, 3: 0.2, 4: 0.3, 5: 0.3, 6: 0.3, 7: 0.3}  # adjusted offset for jacket_torso
+shirt_width_multipliers = {1: 3, 2: 2.5, 3: 2.0, 4: 2.5, 5: 2.5, 6: 2.5, 7: 2.5}  # adjusted width multiplier for jacket_torso
+shirt_height_multipliers = {1: 2.5, 2: 2, 3: 1.6, 4: 2, 5: 2, 6: 2, 7: 2}  # adjusted height multiplier for jacket_torso
+hand_filters = {0: None, 1: gauntlet}  # add gauntlet filter for hands
+hand_width_multipliers = {1: 2.5} 
+hand_height_multipliers = {1: 2.5}  
+current_face_filter = 1  # start with LeBron filter (1) or no filter (0)
+current_shirt_filter = 1  # start with current t-shirt (1) or no filter (0)
+current_hand_filter = 0  # start with no hand filter
 
 while cap.isOpened():
     ret, frame = cap.read()
     
-    # mirroed view cos my asymetrical face got me fucked up gng
+    # mirroed view 
     frame = cv2.flip(frame, 1)
     
     # calculate FPS
@@ -152,12 +161,12 @@ while cap.isOpened():
     # run yolo inference on the frame with higher confidence
     results = model(frame, conf=0.3)  # lower confidence threshold for better detection
 
-    # Process body detections
+    # process body detections
     for r in results:
         if hasattr(r, "keypoints") and r.keypoints is not None:
             keypoints = r.keypoints.xy.cpu().numpy()
 
-            # THIS PART WAS SO FUCKING DIFFICULT WTF BRO
+            # THIS PART WAS SO DIFFICULT 
 
             for person_idx, kp in enumerate(keypoints):  # loop through all detected people with unique index
                 try:
@@ -178,7 +187,7 @@ while cap.isOpened():
 
                     # estimate chin position
                     chin_x = eye_mid_x
-                    chin_y = int(nose_y + (nose_to_eye_distance * 2.5))  # Adjust multiplier for better accuracy
+                    chin_y = int(nose_y + (nose_to_eye_distance * 2.5))  # adjust multiplier for better accuracy
 
                     # calculate head tilt angle
                     angle = np.degrees(np.arctan2(left_eye_y - right_eye_y, left_eye_x - right_eye_x))
@@ -191,12 +200,12 @@ while cap.isOpened():
                     continue  
 
                 # more lenient chin position check
-                if chin_y < nose_y or chin_y - nose_y > 400:  # Increased threshold
+                if chin_y < nose_y or chin_y - nose_y > 400:  # increased threshold
                     continue  
 
                 # more lenient ear spacing check
                 ear_distance = abs(right_ear_x - left_ear_x)
-                if ear_distance < 15 or ear_distance > 400:  # Adjusted thresholds
+                if ear_distance < 15 or ear_distance > 400:  # adjusted thresholds
                     continue  
 
                 # improved face width calculation
@@ -209,11 +218,11 @@ while cap.isOpened():
 
                 # perfect placement
                 new_filter_x = nose_x - filter_width // 2
-                # Adjust vertical position based on filter type
-                if current_face_filter == 3:  # Birthday hat
-                    new_filter_y = eye_mid_y - int(filter_height * 1.2)  # Position hat above the head
+                # adjust vertical position based on filter type
+                if current_face_filter == 3:  # birthday hat
+                    new_filter_y = eye_mid_y - int(filter_height * 5)  # position hat above the head
                 else:
-                    new_filter_y = nose_y - int(filter_height * 0.6)  # Regular face filter position
+                    new_filter_y = nose_y - int(filter_height * 0.6)  # regular face filter position
 
                 # smooth transitions for each person independently
                 if person_idx in prev_filter_params:
@@ -238,65 +247,100 @@ while cap.isOpened():
                     frame = overlay_image(frame, face_filters[current_face_filter], filter_x, filter_y, (filter_width, filter_height), angle)
 
                 # T-SHIRTIFICATION
-                if current_shirt_filter != 0 and shirt_filters[current_shirt_filter] is not None and len(kp) >= 12:  # Make sure we have enough keypoints for shoulders and hips
-                    # Get shoulder points with better precision
+                if current_shirt_filter != 0 and shirt_filters[current_shirt_filter] is not None and len(kp) >= 12:
+                    # get shoulder points with better precision
                     left_shoulder = tuple(map(int, kp[5]))
                     right_shoulder = tuple(map(int, kp[6]))
-                    # Get hip points for better proportions
+                    # get hip points for better proportions
                     left_hip = tuple(map(int, kp[11]))
                     right_hip = tuple(map(int, kp[12]))
 
-                    # Calculate shirt dimensions with improved proportions and validation
+                    # fixed proportions and validation
                     shoulder_width = abs(right_shoulder[0] - left_shoulder[0])
                     torso_height = abs((left_hip[1] + right_hip[1])/2 - (left_shoulder[1] + right_shoulder[1])/2)
                     
-                    # Ensure minimum dimensions to prevent resize errors with custom multipliers for each shirt
+                    # custom multipliers for each shirt
                     width_multiplier = shirt_width_multipliers.get(current_shirt_filter, 2.5)
                     height_multiplier = shirt_height_multipliers.get(current_shirt_filter, 2.0)
                     shirt_width = max(50, int(shoulder_width * width_multiplier))
                     shirt_height = max(50, int(torso_height * height_multiplier))
 
-                    # Enhanced shirt positioning using midpoints
+                    # better shirt positioning using midpoints
                     shoulder_center_x = (left_shoulder[0] + right_shoulder[0]) // 2
                     shoulder_center_y = (left_shoulder[1] + right_shoulder[1]) // 2
                     shirt_x = int(shoulder_center_x - shirt_width // 2)
-                    shirt_y = int(shoulder_center_y - shirt_height * shirt_offsets[current_shirt_filter])  # Use shirt-specific offset
+                    shirt_y = int(shoulder_center_y - shirt_height * shirt_offsets[current_shirt_filter])  # use shirt-specific offset
 
-                    # Skip if dimensions are invalid
+                    # skip if dimensions are invalid
                     if shirt_width <= 0 or shirt_height <= 0:
                         continue
 
-                    # Improved angle calculation using both shoulders
+                    # better angle calculation using both shoulders
                     shoulder_angle = np.degrees(np.arctan2(right_shoulder[1] - left_shoulder[1],
                                                         right_shoulder[0] - left_shoulder[0]))
-                    shirt_angle = 0  # Keep shirt perfectly upright
+                    shirt_angle = 0  # keep shirt perfectly upright
 
-                    # Apply the overlay with adjusted parameters
+                    # apply the overlay with adjusted parameters
                     frame = overlay_image(frame, shirt_filters[current_shirt_filter], shirt_x, shirt_y,
                                         (shirt_width, shirt_height), shirt_angle)
+                
+                # Handle hand filters (gauntlet) - Moved outside of shirt filter block
+                if current_hand_filter != 0 and hand_filters[current_hand_filter] is not None and len(kp) >= 16:
+                    # Get wrist and elbow keypoints for better angle calculation
+                    left_wrist = tuple(map(int, kp[9]))
+                    right_wrist = tuple(map(int, kp[10]))
+                    left_elbow = tuple(map(int, kp[7]))
+                    right_elbow = tuple(map(int, kp[8]))
                     
+                    # Calculate hand dimensions and angles for both hands
+                    for wrist, elbow in [(left_wrist, left_elbow), (right_wrist, right_elbow)]:
+                        if all(coord > 0 for coord in wrist) and all(coord > 0 for coord in elbow):
+                            # Calculate hand size based on body proportions
+                            hand_size = int(shoulder_width * 0.6)  # Increased base size
+                            hand_width = int(hand_size * hand_width_multipliers[current_hand_filter])
+                            hand_height = int(hand_size * hand_height_multipliers[current_hand_filter])
+                            
+                            # Calculate angle between elbow and wrist
+                            hand_angle = np.degrees(np.arctan2(wrist[1] - elbow[1], wrist[0] - elbow[0])) + 90  # Added 90 degrees for clockwise rotation
+                            
+                            # Create a copy of the gauntlet and flip it for right hand
+                            gauntlet_overlay = hand_filters[current_hand_filter].copy()
+                            if wrist == right_wrist:
+                                gauntlet_overlay = cv2.flip(gauntlet_overlay, 1)  # Horizontal flip for right hand
+                            
+                            # Adjust position to better align with hand
+                            hand_x = wrist[0] - hand_width // 3  # Adjusted horizontal offset
+                            hand_y = wrist[1] - hand_height // 1.5  # Increased vertical offset to position gauntlets higher
+                            
+                            # Apply the gauntlet overlay with rotation
+                            frame = overlay_image(frame, gauntlet_overlay,
+                                                hand_x, hand_y, (hand_width, hand_height), hand_angle)
 
 
-    # Filter state is managed outside the loop to maintain proper switching
+    
 
     # showing FPS and controls info
     cv2.putText(frame, f'FPS: {int(fps)}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
     cv2.putText(frame, 'F: Switch Face Filter', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
     cv2.putText(frame, 'S: Switch Shirt Filter', (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-    cv2.putText(frame, 'R: Remove All Filters', (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    cv2.putText(frame, 'H: Switch Hand Filter', (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    cv2.putText(frame, 'R: Remove All Filters', (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
     cv2.imshow("LeBron Filter + Full Tracking View (Multi-Person + Head Tilt Fixed)", frame)
 
     # keyboard controls
     key = cv2.waitKey(1) & 0xFF
     if key == ord('q'):
         break
-    elif key == ord('f'):  # Switch face filter
+    elif key == ord('f'):  # switch face filter
         current_face_filter = (current_face_filter + 1) % len(face_filters)
-    elif key == ord('s'):  # Switch shirt filter
+    elif key == ord('s'):  # switch shirt filter
         current_shirt_filter = (current_shirt_filter + 1) % len(shirt_filters)
-    elif key == ord('r'):  # Remove all filters
+    elif key == ord('h'):  # switch hand filter
+        current_hand_filter = (current_hand_filter + 1) % len(hand_filters)
+    elif key == ord('r'):  # remove all filters
         current_face_filter = 0
         current_shirt_filter = 0
+        current_hand_filter = 0
 
     # press q to quit
     if cv2.waitKey(1) & 0xFF == ord('q'):
