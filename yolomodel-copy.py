@@ -38,8 +38,9 @@ SHIRT = 1
 FACE = 2
 PIC_URL = ["empty.png", "lebron.png", "hat.png", "sstshirt.png", "bluesw.png"]
 PIC_TYPE = [CLEAR, FACE, FACE, SHIRT, SHIRT]
-
 PIC_ICON_SIZE = (100, 100)
+MARGIN_FACE = 100
+MARGIN_BODY = 300
 pictures = [] #reference for the picture 1. file 2. height 3. width
 for i in range(len(PIC_URL)):
     tmp = cv2.imread(PIC_URL[i], -1)
@@ -62,7 +63,7 @@ selection_current = [] #current location of where they are, even when they are m
 for i in range(len(pictures)):
     SELECTION_DEFAULT.append(Coord(interval_x*(i+1)-pictures[i].width//2, interval_y-pictures[i].height//2))
     selection_current.append(Coord(SELECTION_DEFAULT[i].x, SELECTION_DEFAULT[i].y))
-print(selection_current)
+
 
 #for the snapping; js 1. position of the nose 2. assigned thing
 class Person:
@@ -75,8 +76,8 @@ class Person:
         self.body_y = body_y
 
 
-people = [Person(0, 0, 0, 3,0,0)]
-amt_people = 1
+people = {}
+amt_people = 0
 
 # making filter tilt when we tilt our head
 def rotate_image(image, angle):
@@ -135,23 +136,21 @@ def change_pic_coord(event,x,y,flags,param):
         if drag_state:
             drag_state = False
             #reset the selector picture to go back
-            print(SELECTION_DEFAULT[dragging_obj].x, SELECTION_DEFAULT[dragging_obj].y)
+            #print(SELECTION_DEFAULT[dragging_obj].x, SELECTION_DEFAULT[dragging_obj].y)
             selection_current[dragging_obj].x = SELECTION_DEFAULT[dragging_obj].x
             selection_current[dragging_obj].y = SELECTION_DEFAULT[dragging_obj].y
             
             # assign the thing to someone
             if PIC_TYPE[dragging_obj] == SHIRT or PIC_TYPE[dragging_obj] == CLEAR:
-                MARGIN = 300
-                for i in range(amt_people):
-                    if abs(x-people[i].body_x < MARGIN) and abs(y-people[i].body_y < MARGIN):
+                for i in people:
+                    if abs(x-people[i].body_x < MARGIN_BODY) and abs(y-people[i].body_y < MARGIN_BODY):
                         people[i].body_image_it = dragging_obj
                         print("body" , i)
                         break
             
             if PIC_TYPE[dragging_obj] == FACE or PIC_TYPE[dragging_obj] == CLEAR:
-                MARGIN = 100
-                for i in range(amt_people):
-                    if abs(x-people[i].face_x < MARGIN) and abs(y-people[i].face_y < MARGIN):
+                for i in people:
+                    if abs(x-people[i].face_x < MARGIN_FACE) and abs(y-people[i].face_y < MARGIN_FACE):
                         people[i].face_image_it = dragging_obj
                         print("face" , i)
                         break
@@ -159,7 +158,7 @@ def change_pic_coord(event,x,y,flags,param):
         #decide if the mouse click is close enuough to the picture to be clicked
         else:
             for i in range(len(pictures)):
-                print(i,x, SELECTION_DEFAULT[i].x, y, SELECTION_DEFAULT[i].y)
+                #print(i,x, SELECTION_DEFAULT[i].x, y, SELECTION_DEFAULT[i].y)
                 if x-SELECTION_DEFAULT[i].x > 0 and x-SELECTION_DEFAULT[i].x < pictures[i].width:
                     if y-SELECTION_DEFAULT[i].y > 0 and y-SELECTION_DEFAULT[i].y < pictures[i].height:
                         drag_state = True
@@ -169,7 +168,7 @@ def change_pic_coord(event,x,y,flags,param):
     elif event == cv2.EVENT_MOUSEMOVE and drag_state:
         selection_current[dragging_obj].x = x-(pictures[dragging_obj].width//2)
         selection_current[dragging_obj].y = y-(pictures[dragging_obj].height//2)
-    print(event, x, y)
+    #print(event, x, y)
 cv2.setMouseCallback(FRAME_TITLE,change_pic_coord)
 
 def overlay_LEBRON(kp):
@@ -263,6 +262,7 @@ def overlay_shirt(kp):
 
 
 #only process the yolo every 4 frames
+last_seen = []
 frame_count = 0
 frame_skip = 3
 while cap.isOpened():
@@ -284,6 +284,7 @@ while cap.isOpened():
     frame_count += 1
     if frame_count == frame_skip:
         frame_count = 0
+        last_seen = []
         # run yolo inference on the frame with higher confidence
         #frame[:][:481] cause the bottom 200px is js my rectangle
         results = model(frame[:][:481], conf=0.3)  # lower confidence threshold for better detection
@@ -292,30 +293,30 @@ while cap.isOpened():
             keypoints = results[0].keypoints.xy.cpu().numpy()
 
             # THIS PART WAS SO FUCKING DIFFICULT WTF BRO
-            person_idx = -1
+            #person_idx = -1
             for person_id, kp in enumerate(keypoints):  # loop through all detected people with unique index
                 if len(kp) < 13:
                     continue
                 else:
-                    person_idx +=1
                     #update each persons stats for the drag and drop
-                    if (amt_people <= person_idx):
-                        people.append(Person(0, 0, 0, 0, 0, 0))
+                    last_seen.append(person_id)
+                    if (not person_id in people):
+                        people[person_id] = Person(0, 0, 0, 0, 0, 0)
                         amt_people += 1
                     #face
                     keypoints_int = kp[:13].astype(np.int32)
                     nose_x, nose_y = keypoints_int[0]
-                    people[person_idx].face_x = nose_x
-                    people[person_idx].face_y = nose_y
+                    people[person_id].face_x = nose_x
+                    people[person_id].face_y = nose_y
 
                     #torso
                     l_shoulder_x, l_shoulder_y = keypoints_int[5]
-                    people[person_idx].body_x = l_shoulder_x
-                    people[person_idx].body_y = l_shoulder_y
+                    people[person_id].body_x = l_shoulder_x
+                    people[person_id].body_y = l_shoulder_y
 
 
                     #now add overlays
-                    if (people[person_idx].body_image_it != 0):
+                    if (people[person_id].body_image_it != 0):
                         res = overlay_shirt(kp)
                         if res == None:
                             body_x = body_y = body_width = body_height = body_angle = 0
@@ -325,11 +326,11 @@ while cap.isOpened():
                             body_x = max(0, min(body_x, frame.shape[1] - body_width))
                             body_y = max(0, min(body_y, frame.shape[0] - body_height))
                             #hawk tuah overlay that thing
-                            frame = overlay_image(frame, pictures[people[person_idx].body_image_it].file, body_x, body_y, (body_width, body_height), body_angle)
+                            frame = overlay_image(frame, pictures[people[person_id].body_image_it].file, body_x, body_y, (body_width, body_height), body_angle)
                     else:
                         body_x = body_y = body_width = body_height = body_angle = 0
 
-                    if (people[person_idx].face_image_it != 0):
+                    if (people[person_id].face_image_it != 0):
                         res = overlay_LEBRON(kp)
                         if res == None:
                             face_x = face_y = face_width = face_height = face_angle = 0
@@ -339,15 +340,15 @@ while cap.isOpened():
                             face_x = max(0, min(face_x, frame.shape[1] - face_width))
                             face_y = max(0, min(face_y, frame.shape[0] - face_height))
                             #hawk tuah overlay that thing
-                            frame = overlay_image(frame, pictures[people[person_idx].face_image_it].file, face_x, face_y, (face_width, face_height), face_angle)
+                            frame = overlay_image(frame, pictures[people[person_id].face_image_it].file, face_x, face_y, (face_width, face_height), face_angle)
                     else:
                         face_x = face_y = face_width = face_height = face_angle = 0
 
                     
 
                     # store parameters for each person
-                    prev_filter_params_face[person_idx] = (face_x, face_y, face_width, face_height, face_angle)
-                    prev_filter_params_body[person_idx] = (body_x, body_y, body_width, body_height, body_angle)
+                    prev_filter_params_face[person_id] = (face_x, face_y, face_width, face_height, face_angle)
+                    prev_filter_params_body[person_id] = (body_x, body_y, body_width, body_height, body_angle)
                     
                 
 
@@ -398,17 +399,16 @@ while cap.isOpened():
                     
     else:
         #overlay old ones when not processing
-        for person_idx in range(amt_people):
-            if (people[person_idx].body_image_it != 0 and person_idx in prev_filter_params_body):
-                filter_x, filter_y, filter_width, filter_height, angle = prev_filter_params_body[person_idx]
+        for person_id in last_seen:
+            if (people[person_id].body_image_it != 0 and person_id in prev_filter_params_body):
+                filter_x, filter_y, filter_width, filter_height, angle = prev_filter_params_body[person_id]
                 if (filter_width != 0):
-                    frame = overlay_image(frame, pictures[people[person_idx].body_image_it].file, filter_x, filter_y, (filter_width, filter_height), angle)
+                    frame = overlay_image(frame, pictures[people[person_id].body_image_it].file, filter_x, filter_y, (filter_width, filter_height), angle)
 
-            if (people[person_idx].face_image_it != 0  and person_idx in prev_filter_params_face):
-                filter_x, filter_y, filter_width, filter_height, angle = prev_filter_params_face[person_idx]
+            if (people[person_id].face_image_it != 0  and person_id in prev_filter_params_face):
+                filter_x, filter_y, filter_width, filter_height, angle = prev_filter_params_face[person_id]
                 if (filter_width != 0):
-                    print("face hit")
-                    frame = overlay_image(frame, pictures[people[person_idx].face_image_it].file, filter_x, filter_y, (filter_width, filter_height), angle)
+                    frame = overlay_image(frame, pictures[people[person_id].face_image_it].file, filter_x, filter_y, (filter_width, filter_height), angle)
             
             
                 
@@ -418,6 +418,14 @@ while cap.isOpened():
     #overlay the selections
     for i in range(len(selection_current)):
         frame = overlay_image(frame, pictures[i].file, selection_current[i].x, selection_current[i].y, (pictures[i].height, pictures[i].width), 0)
+
+    #
+    if (drag_state):
+        for person_id in last_seen:
+            if PIC_TYPE[dragging_obj] == FACE or PIC_TYPE[dragging_obj] == CLEAR:
+                frame = cv2.circle(frame, (people[person_id].face_x, people[person_id].face_y), MARGIN_FACE,  (0, 0, 255), 2)
+            if PIC_TYPE[dragging_obj] == SHIRT or PIC_TYPE[dragging_obj] == CLEAR:
+                frame = cv2.circle(frame, (people[person_id].body_x, people[person_id].body_y), MARGIN_BODY,  (0, 0, 255), 2)
 
     # showing FPS
     cv2.putText(frame, f'FPS: {int(fps)}', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
@@ -431,3 +439,4 @@ while cap.isOpened():
 # thats game
 cap.release()
 cv2.destroyAllWindows()
+
