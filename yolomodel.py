@@ -73,8 +73,8 @@ for i in range(len(PIC_URL)): #load pictures into the list
 
 # filter management
 #face_filters = {0: None, 1: lebron_face, 2: heart_face, 3: birthday_hat}  # added birthday hat filter
-face_width_multipliers = {1: 1.2, 2: 1.0}  # width multipliers for each face filter
-face_height_multipliers = {1: 0.4, 2: 0.8}  # height multipliers for each face filter (adjusted for birthday hat)
+face_width_multipliers = {1: 1.2, 2: 1.4}  # width multipliers for each face filter, wider for hat
+face_height_multipliers = {1: 0.4, 2: 0.6}  # height multipliers for each face filter, shorter for hat
 #shirt_filters = {0: None, 1: tshirt, 2: blue_shirt, 3: red_shirt, 4: green_shirt, 5: black_shirt, 6: yellow_shirt, 7: jacket_torso}  # Use jacket_torso as base image
 shirt_offsets = {3: 0.3, 4: 0.3, 5: 0.2, 6: 0.3, 7: 0.3, 8: 0.3, 9: 0.3}  # adjusted offset for jacket_torso
 shirt_width_multipliers = {3: 3, 4: 2.5, 5: 2.0, 6: 2.5, 7: 2.5, 8: 2.5, 9: 2.5}  # adjusted width multiplier for jacket_torso
@@ -321,7 +321,11 @@ while cap.isOpened():
                     new_filter_x = nose_x - filter_width // 2
                     # adjust vertical position based on filter type
                     if current_face_filter == 2:  # birthday hat
-                        new_filter_y = eye_mid_y - int(filter_height * 5)  # position hat above the head
+                        # Position hat on top of head
+                        head_top_y = eye_mid_y - (face_height * 0.5)  # Move higher to estimate top of head
+                        new_filter_y = head_top_y - (filter_height * 0.7)  # Place hat directly on top of head
+                        # Smoother rotation for hat
+                        angle = angle * 0.8  # Reduce rotation intensity for more natural hat movement
                     else:
                         new_filter_y = nose_y - int(filter_height * 0.6)  # regular face filter position
 
